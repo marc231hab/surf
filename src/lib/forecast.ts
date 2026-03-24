@@ -163,6 +163,172 @@ function getDayConditions(
 /**
  * Fetch complete 9-day forecast
  */
+export interface HourlyForecast {
+  time: string; // "2026-03-24T08:00"
+  hour: number; // 8
+  waveHeight: number;
+  wavePeriod: number;
+  waveDirection: number;
+  windSpeed: number;
+  windDirection: number;
+  tideHeight: number;
+  score: number;
+  rating: string;
+  colorClass: string;
+}
+
+export interface DayWithHourly extends DayForecast {
+  hourly: HourlyForecast[];
+  bestHour: number;
+  bestScore: number;
+}
+
+/**
+ * Fetch hourly tide predictions for interpolation
+ */
+async function fetchHourlyTides(): Promise<Map<string, number>> {
+  const tidesByHour = new Map<string, number>();
+  
+  try {
+    const now = new Date();
+    const startDate = now.toISOString().split('T')[0].replace(/-/g, '');
+    const endDate = new Date(now.getTime() + 11 * 24 * 60 * 60 * 1000)
+      .toISOString().split('T')[0].replace(/-/g, '');
+    
+    // Get 6-minute interval predictions for accurate hourly values
+    const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${startDate}&end_date=${endDate}&station=${TIDE_STATION}&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&interval=h&format=json`;
+    
+    const res = await fetch(url, { next: { revalidate: 3600 } });
+    if (!res.ok) return tidesByHour;
+    
+    const data = await res.json();
+    if (!data.predictions) return tidesByHour;
+    
+    for (const pred of data.predictions) {
+      // Format: "2026-03-24 08:00" -> "2026-03-24T08:00"
+      const timeKey = pred.t.replace(' ', 'T');
+      tidesByHour.set(timeKey, parseFloat(pred.v));
+    }
+    
+    return tidesByHour;
+  } catch (error) {
+    console.error('Hourly tide error:', error);
+    return tidesByHour;
+  }
+}
+
+/**
+ * Fetch 9-day forecast with hourly data for each day
+ */
+export async function fetch9DayForecastWithHourly(): Promise<DayWithHourly[]> {
+  const [marine, weather, tides, hourlyTides] = await Promise.all([
+    fetchMarineForecast(),
+    fetchWindForecast(),
+    fetchTidePredictions(),
+    fetchHourlyTides(),
+  ]);
+  
+  if (!marine || !weather) {
+    return [];
+  }
+  
+  const forecasts: DayWithHourly[] = [];
+  const now = new Date();
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  for (let i = 0; i < 9; i++) {
+    const date = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
+    const dateStr = date.toISOString().split('T')[0];
+    const dayName = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : dayNames[date.getDay()];
+    
+    // Get hourly forecasts for this day (5am - 9pm)
+    const hourly: HourlyForecast[] = [];
+    let bestHour = 8;
+    let bestScore = 0;
+    
+    for (let hour = 5; hour <= 21; hour++) {
+      const timeStr = `${dateStr}T${hour.toString().padStart(2, '0')}:00`;
+      const idx = marine.time.indexOf(timeStr);
+      
+      if (idx === -1) continue;
+      
+      const waveHeight = marine.wave_height[idx] != null 
+        ? Math.round(marine.wave_height[idx] * 3.281 * 10) / 10 
+        : 0;
+      const wavePeriod = marine.wave_period[idx] || 8;
+      const waveDirection = marine.wave_direction[idx] || 170;
+      const windSpeed = weather.wind_speed_10m[idx] || 0;
+      const windDirection = weather.wind_direction_10m[idx] || 0;
+      const tideHeight = hourlyTides.get(timeStr) || 3;
+      
+      const breakdown = calculateSurfScoreWithBreakdown({
+        waveHeight,
+        wavePeriod,
+        waveDirection,
+        windSpeed,
+        windDirection,
+        tideHeight,
+        tideRising: true,
+      });
+      
+      hourly.push({
+        time: timeStr,
+        hour,
+        waveHeight,
+        wavePeriod: Math.round(wavePeriod * 10) / 10,
+        waveDirection: Math.round(waveDirection),
+        windSpeed: Math.round(windSpeed * 10) / 10,
+        windDirection: Math.round(windDirection),
+        tideHeight: Math.round(tideHeight * 10) / 10,
+        score: breakdown.total,
+        rating: getSurfRating(breakdown.total),
+        colorClass: getRatingColor(breakdown.total),
+      });
+      
+      if (breakdown.total > bestScore) {
+        bestScore = breakdown.total;
+        bestHour = hour;
+      }
+    }
+    
+    const conditions = getDayConditions(dateStr, marine, weather);
+    if (!conditions) continue;
+    
+    const tideRange = tides.get(dateStr) || { low: 1.5, high: 5.0 };
+    const avgTide = (tideRange.low + tideRange.high) / 2;
+    
+    const breakdown = calculateSurfScoreWithBreakdown({
+      waveHeight: conditions.waveHeight,
+      wavePeriod: conditions.wavePeriod,
+      waveDirection: conditions.waveDirection,
+      windSpeed: conditions.windSpeed,
+      windDirection: conditions.windDirection,
+      tideHeight: avgTide,
+      tideRising: true,
+    });
+    
+    forecasts.push({
+      date: dateStr,
+      dayName,
+      waveHeight: conditions.waveHeight,
+      wavePeriod: conditions.wavePeriod,
+      waveDirection: conditions.waveDirection,
+      windSpeed: conditions.windSpeed,
+      windDirection: conditions.windDirection,
+      tideRange,
+      score: breakdown.total,
+      rating: getSurfRating(breakdown.total),
+      colorClass: getRatingColor(breakdown.total),
+      breakdown,
+      hourly,
+      bestHour,
+      bestScore,
+    });
+  }
+  
+  return forecasts;
+}
+
 export async function fetch9DayForecast(): Promise<DayForecast[]> {
   const [marine, weather, tides] = await Promise.all([
     fetchMarineForecast(),
