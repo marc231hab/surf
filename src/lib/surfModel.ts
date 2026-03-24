@@ -58,30 +58,34 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   let total = 50;
 
   // === WAVE HEIGHT ===
-  // Below 2ft = lower scores
+  // Need at least 2.5ft for good surf, 3ft+ for great
   const h = input.waveHeight;
   let heightScore = 0;
   let heightNote = '';
   
-  if (h >= 3 && h <= 6) {
+  if (h >= 3.5 && h <= 6) {
     heightScore = 25;
     heightNote = `${h}ft - sweet spot`;
-  } else if (h >= 2.5 && h < 3) {
-    heightScore = 15;
+  } else if (h >= 3 && h < 3.5) {
+    heightScore = 18;
     heightNote = `${h}ft - good size`;
-  } else if (h >= 2 && h < 2.5) {
-    heightScore = 8;
+  } else if (h >= 2.5 && h < 3) {
+    heightScore = 10;
     heightNote = `${h}ft - decent`;
+  } else if (h >= 2 && h < 2.5) {
+    heightScore = -5;
+    heightNote = `${h}ft - small`;
+    notes.push('Waves small');
   } else if (h >= 1.5 && h < 2) {
-    heightScore = -12;
+    heightScore = -18;
     heightNote = `${h}ft - below 2ft`;
     notes.push('Waves below 2ft');
   } else if (h >= 1 && h < 1.5) {
-    heightScore = -25;
-    heightNote = `${h}ft - small`;
+    heightScore = -28;
+    heightNote = `${h}ft - very small`;
     notes.push('Waves too small');
   } else if (h < 1) {
-    heightScore = -35;
+    heightScore = -40;
     heightNote = `${h}ft - flat`;
     notes.push('Basically flat');
   } else if (h > 6 && h <= 8) {
@@ -94,6 +98,7 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   total += heightScore;
 
   // === WAVE PERIOD ===
+  // Period is critical for wave quality - short period = choppy/weak
   const p = input.wavePeriod;
   let periodScore = 0;
   let periodNote = '';
@@ -102,18 +107,19 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
     periodScore = 22;
     periodNote = `${p}s - ideal for Folly`;
   } else if (p >= 8 && p < 10) {
-    periodScore = 12;
+    periodScore = 10;
     periodNote = `${p}s - good`;
   } else if (p >= 7 && p < 8) {
-    periodScore = 5;
+    periodScore = 0;
     periodNote = `${p}s - okay`;
   } else if (p >= 6 && p < 7) {
-    periodScore = -8;
+    periodScore = -15;
     periodNote = `${p}s - short, choppy`;
+    notes.push('Short period');
   } else if (p < 6) {
-    periodScore = -25;
+    periodScore = -30;
     periodNote = `${p}s - very short`;
-    notes.push('Short period - poor quality');
+    notes.push('Very short period');
   } else if (p > 13 && p <= 15) {
     periodScore = -8;
     periodNote = `${p}s - closes out`;
@@ -268,8 +274,16 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   total += windScore;
 
   // === INTERACTION PENALTIES ===
+  // Small waves + short period = not worth it
+  if (h < 2.5 && p < 7) {
+    total -= 15;
+    notes.push('Small + short period');
+  }
+  if (h < 2 && p < 8) {
+    total -= 10; // Extra penalty for very small
+  }
   if (t < 2.2 && h < 2.5) {
-    total -= 18;
+    total -= 15;
     notes.push('Low tide + small waves');
   }
   if (p < 6 && onshore && ws > 7) {
@@ -279,8 +293,9 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   if (p < 6 && ws > 10) {
     total -= 10;
   }
-  if (offshore && ws <= 15 && (h < 3 || t < 2.5)) {
-    total += 8;
+  // Good conditions bonus only when waves are actually rideable
+  if (offshore && ws <= 10 && h >= 2.5 && p >= 7) {
+    total += 5;
   }
 
   return {

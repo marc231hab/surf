@@ -75,20 +75,22 @@ def label_surf_score(
     
     # =========================================================================
     # WAVE HEIGHT (most important factor)
-    # Below 2ft = lower scores
+    # Need at least 2.5ft for good surf, 3ft+ for great
     # =========================================================================
-    if wave_height >= 3 and wave_height <= 6:
+    if wave_height >= 3.5 and wave_height <= 6:
         score += 25  # Sweet spot
+    elif wave_height >= 3 and wave_height < 3.5:
+        score += 18  # Good size
     elif wave_height >= 2.5 and wave_height < 3:
-        score += 15  # Good size
+        score += 10  # Decent
     elif wave_height >= 2 and wave_height < 2.5:
-        score += 8   # Decent, minimum for fun
+        score -= 5   # Small
     elif wave_height >= 1.5 and wave_height < 2:
-        score -= 12  # Below 2ft - not great
+        score -= 18  # Below 2ft - not great
     elif wave_height >= 1 and wave_height < 1.5:
-        score -= 25  # Small - hard to catch
+        score -= 28  # Very small - hard to catch
     elif wave_height < 1:
-        score -= 35  # Too small to surf
+        score -= 40  # Too small to surf
     elif wave_height > 6 and wave_height <= 8:
         score += 18  # Solid day
     elif wave_height > 8 and wave_height <= 10:
@@ -100,17 +102,17 @@ def label_surf_score(
     # WAVE PERIOD (critical for wave quality)
     # =========================================================================
     # Folly works best with 10-13s, 14-15s can close out, >15s not ideal
-    # Below 6s = poor quality waves (heavy penalty)
+    # Short period = choppy/weak waves
     if wave_period >= 10 and wave_period <= 13:
         score += 22  # Sweet spot for Folly
     elif wave_period >= 8 and wave_period < 10:
-        score += 12  # Good
+        score += 10  # Good
     elif wave_period >= 7 and wave_period < 8:
-        score += 5   # Okay
+        score += 0   # Okay
     elif wave_period >= 6 and wave_period < 7:
-        score -= 8   # Short period, choppy
+        score -= 15  # Short period, choppy
     elif wave_period < 6:
-        score -= 25  # Very short period - poor quality waves
+        score -= 30  # Very short period - poor quality waves
     elif wave_period > 13 and wave_period <= 15:
         score -= 8   # Closes out at Folly
     elif wave_period > 15:
@@ -273,17 +275,23 @@ def label_surf_score(
     # INTERACTION TERMS
     # =========================================================================
     
-    # Small waves + long period = surprisingly good
-    if wave_height < 3 and wave_height >= 1.5 and wave_period >= 11:
-        score += 10
+    # Small waves + short period = not worth it
+    if wave_height < 2.5 and wave_period < 7:
+        score -= 15
+    if wave_height < 2 and wave_period < 8:
+        score -= 10  # Extra penalty for very small
+    
+    # Small waves + long period = surprisingly ok
+    if wave_height < 3 and wave_height >= 2 and wave_period >= 11:
+        score += 8
     
     # Low tide + small waves = very bad (compounds)
     if tide_height < 2.2 and wave_height < 2.5:
-        score -= 18  # Both factors bad = compounds
+        score -= 15  # Both factors bad = compounds
     
-    # Offshore wind saves marginal conditions
-    if offshore and wind_speed <= 15 and (wave_height < 3 or tide_height < 2.5):
-        score += 8  # Light offshore helps marginal conditions
+    # Offshore wind bonus only when waves are rideable
+    if offshore and wind_speed <= 10 and wave_height >= 2.5 and wave_period >= 7:
+        score += 5  # Light offshore helps decent conditions
     
     # Big waves + good tide = bonus
     if wave_height >= 5 and tide_height >= 3 and tide_height <= 4.5:
