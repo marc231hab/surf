@@ -58,7 +58,7 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   let total = 50;
 
   // === WAVE HEIGHT ===
-  // Need at least 2.5ft for good surf, 3ft+ for great
+  // Gradual slope from 1.5ft to 3ft+
   const h = input.waveHeight;
   let heightScore = 0;
   let heightNote = '';
@@ -72,20 +72,25 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   } else if (h >= 2.5 && h < 3) {
     heightScore = 10;
     heightNote = `${h}ft - decent`;
-  } else if (h >= 2 && h < 2.5) {
-    heightScore = -5;
+  } else if (h >= 2.3 && h < 2.5) {
+    heightScore = 5;
+    heightNote = `${h}ft - okay`;
+  } else if (h >= 2.0 && h < 2.3) {
+    heightScore = 0;
     heightNote = `${h}ft - small`;
-    notes.push('Waves small');
-  } else if (h >= 1.5 && h < 2) {
-    heightScore = -18;
-    heightNote = `${h}ft - below 2ft`;
-    notes.push('Waves below 2ft');
-  } else if (h >= 1 && h < 1.5) {
-    heightScore = -28;
+  } else if (h >= 1.8 && h < 2.0) {
+    heightScore = -5;
+    heightNote = `${h}ft - marginal`;
+  } else if (h >= 1.5 && h < 1.8) {
+    heightScore = -12;
     heightNote = `${h}ft - very small`;
+    notes.push('Waves small');
+  } else if (h >= 1 && h < 1.5) {
+    heightScore = -22;
+    heightNote = `${h}ft - too small`;
     notes.push('Waves too small');
   } else if (h < 1) {
-    heightScore = -40;
+    heightScore = -35;
     heightNote = `${h}ft - flat`;
     notes.push('Basically flat');
   } else if (h > 6 && h <= 8) {
