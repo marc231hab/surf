@@ -2,7 +2,7 @@ services:
   surf:
     build: .
     ports:
-      - "3300:3000"
+      - "3400:3000"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
