@@ -73,16 +73,16 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
     heightScore = 10;
     heightNote = `${h}ft - decent`;
   } else if (h >= 2.3 && h < 2.5) {
-    heightScore = 5;
-    heightNote = `${h}ft - okay`;
+    heightScore = 2;
+    heightNote = `${h}ft - smallish`;
   } else if (h >= 2.0 && h < 2.3) {
-    heightScore = 0;
+    heightScore = -4;
     heightNote = `${h}ft - small`;
   } else if (h >= 1.8 && h < 2.0) {
-    heightScore = -5;
+    heightScore = -9;
     heightNote = `${h}ft - marginal`;
   } else if (h >= 1.5 && h < 1.8) {
-    heightScore = -12;
+    heightScore = -15;
     heightNote = `${h}ft - very small`;
     notes.push('Waves small');
   } else if (h >= 1 && h < 1.5) {
