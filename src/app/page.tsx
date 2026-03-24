@@ -12,6 +12,7 @@ interface HourlyForecast {
   windSpeed: number;
   windDirection: number;
   tideHeight: number;
+  tideRising: boolean;
   score: number;
   rating: string;
   colorClass: string;
@@ -142,7 +143,7 @@ function HourlyDetail({ hour }: { hour: HourlyForecast }) {
         </div>
         <div className="bg-zinc-800 rounded-lg p-2">
           <div className="text-zinc-500 text-xs">Tide</div>
-          <div className="font-mono">{hour.tideHeight}ft</div>
+          <div className="font-mono">{hour.tideHeight}ft {hour.tideRising ? '↑' : '↓'}</div>
         </div>
       </div>
     </div>

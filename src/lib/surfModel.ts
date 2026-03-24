@@ -194,10 +194,28 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
     tideNote = `${t.toFixed(1)}ft - ${t > 5.5 ? 'too high' : 'high'}`;
   }
   
-  // Rising tide bonus
-  if (input.tideRising && t >= 2.2 && t <= 4.5) {
-    tideScore += 6;
-    tideNote += ' ↑';
+  // Rising vs falling tide - significant impact
+  if (input.tideRising) {
+    if (t >= 2.0 && t <= 4.5) {
+      tideScore += 10;
+      tideNote += ' ↑ rising';
+    } else {
+      tideScore += 5;
+      tideNote += ' ↑';
+    }
+  } else {
+    // Falling tide penalty
+    if (t < 2.5) {
+      tideScore -= 12;
+      tideNote += ' ↓ dropping';
+      notes.push('Falling tide');
+    } else if (t < 3.5) {
+      tideScore -= 6;
+      tideNote += ' ↓';
+    } else {
+      tideScore -= 3;
+      tideNote += ' ↓';
+    }
   }
   total += tideScore;
 

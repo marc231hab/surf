@@ -172,6 +172,7 @@ export interface HourlyForecast {
   windSpeed: number;
   windDirection: number;
   tideHeight: number;
+  tideRising: boolean;
   score: number;
   rating: string;
   colorClass: string;
@@ -184,10 +185,10 @@ export interface DayWithHourly extends DayForecast {
 }
 
 /**
- * Fetch hourly tide predictions for interpolation
+ * Fetch hourly tide predictions with rising/falling info
  */
-async function fetchHourlyTides(): Promise<Map<string, number>> {
-  const tidesByHour = new Map<string, number>();
+async function fetchHourlyTides(): Promise<Map<string, { height: number; rising: boolean }>> {
+  const tidesByHour = new Map<string, { height: number; rising: boolean }>();
   
   try {
     const now = new Date();
@@ -195,19 +196,28 @@ async function fetchHourlyTides(): Promise<Map<string, number>> {
     const endDate = new Date(now.getTime() + 11 * 24 * 60 * 60 * 1000)
       .toISOString().split('T')[0].replace(/-/g, '');
     
-    // Get 6-minute interval predictions for accurate hourly values
+    // Get hourly predictions
     const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${startDate}&end_date=${endDate}&station=${TIDE_STATION}&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&interval=h&format=json`;
     
     const res = await fetch(url, { next: { revalidate: 3600 } });
     if (!res.ok) return tidesByHour;
     
     const data = await res.json();
-    if (!data.predictions) return tidesByHour;
+    if (!data.predictions || data.predictions.length < 2) return tidesByHour;
     
+    // First pass: store all heights
+    const heights: { time: string; height: number }[] = [];
     for (const pred of data.predictions) {
-      // Format: "2026-03-24 08:00" -> "2026-03-24T08:00"
       const timeKey = pred.t.replace(' ', 'T');
-      tidesByHour.set(timeKey, parseFloat(pred.v));
+      heights.push({ time: timeKey, height: parseFloat(pred.v) });
+    }
+    
+    // Second pass: determine rising/falling by comparing to next hour
+    for (let i = 0; i < heights.length; i++) {
+      const current = heights[i];
+      const next = heights[i + 1];
+      const rising = next ? next.height > current.height : false;
+      tidesByHour.set(current.time, { height: current.height, rising });
     }
     
     return tidesByHour;
@@ -259,7 +269,9 @@ export async function fetch9DayForecastWithHourly(): Promise<DayWithHourly[]> {
       const waveDirection = marine.wave_direction[idx] || 170;
       const windSpeed = weather.wind_speed_10m[idx] || 0;
       const windDirection = weather.wind_direction_10m[idx] || 0;
-      const tideHeight = hourlyTides.get(timeStr) || 3;
+      const tideData = hourlyTides.get(timeStr) || { height: 3, rising: true };
+      const tideHeight = tideData.height;
+      const tideRising = tideData.rising;
       
       const breakdown = calculateSurfScoreWithBreakdown({
         waveHeight,
@@ -268,7 +280,7 @@ export async function fetch9DayForecastWithHourly(): Promise<DayWithHourly[]> {
         windSpeed,
         windDirection,
         tideHeight,
-        tideRising: true,
+        tideRising,
       });
       
       hourly.push({
@@ -280,6 +292,7 @@ export async function fetch9DayForecastWithHourly(): Promise<DayWithHourly[]> {
         windSpeed: Math.round(windSpeed * 10) / 10,
         windDirection: Math.round(windDirection),
         tideHeight: Math.round(tideHeight * 10) / 10,
+        tideRising,
         score: breakdown.total,
         rating: getSurfRating(breakdown.total),
         colorClass: getRatingColor(breakdown.total),
