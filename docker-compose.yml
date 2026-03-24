@@ -1,0 +1,10 @@
+services:
+  surf:
+    build: .
+    ports:
+      - "3300:3000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
