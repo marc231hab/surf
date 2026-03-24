@@ -39,13 +39,18 @@ def angle_difference(a: float, b: float) -> float:
 def is_offshore_wind(wind_dir: float) -> bool:
     """
     Check if wind is offshore at Folly Beach.
-    Beach faces ESE (~110°), so offshore is W to NW (270-340°).
+    Offshore: WSW (247.5°), W (270°), WNW (292.5°), NW (315°), N (0/360°)
+    Range: 247.5° to 360° and 0° to 22.5° (N)
     """
-    return 250 <= wind_dir <= 350 or wind_dir <= 20
+    return (wind_dir >= 247.5 and wind_dir <= 360) or (wind_dir >= 0 and wind_dir <= 22.5)
 
-def is_cross_offshore(wind_dir: float) -> bool:
-    """Cross-offshore: SW or N"""
-    return (200 <= wind_dir < 250) or (340 < wind_dir <= 360) or (0 <= wind_dir <= 30)
+def is_onshore_wind(wind_dir: float) -> bool:
+    """
+    Check if wind is onshore at Folly Beach.
+    Onshore: NE (45°), ENE (67.5°), E (90°), ESE (112.5°), SE (135°), S (180°), SW (225°)
+    Range: 45° to 225°
+    """
+    return wind_dir >= 45 and wind_dir <= 225
 
 def label_surf_score(
     wave_height: float,
@@ -90,6 +95,7 @@ def label_surf_score(
     # WAVE PERIOD (critical for wave quality)
     # =========================================================================
     # Folly works best with 10-13s, 14-15s can close out, >15s not ideal
+    # Below 6s = poor quality waves (heavy penalty)
     if wave_period >= 10 and wave_period <= 13:
         score += 22  # Sweet spot for Folly
     elif wave_period >= 8 and wave_period < 10:
@@ -97,9 +103,9 @@ def label_surf_score(
     elif wave_period >= 7 and wave_period < 8:
         score += 5   # Okay
     elif wave_period >= 6 and wave_period < 7:
-        score -= 5   # Short, needs good wind
+        score -= 8   # Short period, choppy
     elif wave_period < 6:
-        score -= 18  # Messy wind swell
+        score -= 25  # Very short period - poor quality waves
     elif wave_period > 13 and wave_period <= 15:
         score -= 8   # Closes out at Folly
     elif wave_period > 15:
@@ -124,21 +130,24 @@ def label_surf_score(
     
     # =========================================================================
     # TIDE HEIGHT (3.5ft optimal for Folly)
+    # Below 2.2ft = low scores (heavy penalty)
     # =========================================================================
     if tide_height < 0.5:
-        score -= 35  # Almost unsurfable
+        score -= 40  # Almost unsurfable
     elif tide_height < 1.0:
-        score -= 25  # Very low, closing out on sandbars
+        score -= 32  # Very low, closing out on sandbars
     elif tide_height < 1.5:
-        score -= 15  # Low
+        score -= 25  # Low, poor conditions
     elif tide_height < 2.0:
-        score -= 5   # Getting better
+        score -= 18  # Still too low
+    elif tide_height < 2.2:
+        score -= 12  # Below threshold, not great
     elif tide_height >= 3.0 and tide_height <= 4.0:
         score += 12  # Sweet spot
     elif tide_height >= 2.5 and tide_height < 3.0:
         score += 8   # Good
-    elif tide_height >= 2.0 and tide_height < 2.5:
-        score += 4   # Decent
+    elif tide_height >= 2.2 and tide_height < 2.5:
+        score += 4   # Decent, above threshold
     elif tide_height > 4.0 and tide_height <= 5.0:
         score += 5   # High but workable
     elif tide_height > 5.0 and tide_height <= 5.5:
@@ -146,46 +155,70 @@ def label_surf_score(
     elif tide_height > 5.5:
         score -= 8   # Too high
     
-    # Tide direction bonus
-    if tide_rising and tide_height >= 1.5 and tide_height <= 4.5:
+    # Tide direction bonus (only if above 2.2ft threshold)
+    if tide_rising and tide_height >= 2.2 and tide_height <= 4.5:
         score += 6  # Rising tide is cleaner
     
     # =========================================================================
     # WIND SPEED & DIRECTION
     # =========================================================================
+    # Onshore: NE, ENE, E, ESE, SE, S, SW (45° - 225°)
+    #   - Any onshore = negative impact
+    #   - Above 7kn = heavy negative impact
+    # Offshore: WSW, W, WNW, NW, N (247.5° - 360° and 0° - 22.5°)
+    #   - Below 15kn = positive impact
+    #   - Above 15kn = negative impact
+    # =========================================================================
     offshore = is_offshore_wind(wind_direction)
-    cross_offshore = is_cross_offshore(wind_direction)
+    onshore = is_onshore_wind(wind_direction)
     
-    if wind_speed <= 5:
-        score += 15  # Glassy
-    elif wind_speed <= 8:
-        score += 10  # Light
-    elif wind_speed <= 12:
-        if offshore:
-            score += 8  # Offshore, still good
-        elif cross_offshore:
-            score += 3  # Cross, okay
+    if wind_speed <= 3:
+        score += 15  # Glassy, direction doesn't matter much
+    elif offshore:
+        # Offshore wind
+        if wind_speed <= 7:
+            score += 12  # Light offshore = excellent
+        elif wind_speed <= 10:
+            score += 10  # Moderate offshore = great
+        elif wind_speed <= 15:
+            score += 5   # Stronger offshore = still good
+        elif wind_speed <= 20:
+            score -= 5   # Strong offshore = getting pushy
+        elif wind_speed <= 25:
+            score -= 12  # Very strong offshore = too much
         else:
-            score -= 5  # Onshore, getting textured
-    elif wind_speed <= 15:
-        if offshore:
-            score += 2  # Offshore helps
+            score -= 20  # Extreme offshore = dangerous
+    elif onshore:
+        # Onshore wind - always negative, heavy if >7kn
+        if wind_speed <= 5:
+            score -= 5   # Light onshore = minor texture
+        elif wind_speed <= 7:
+            score -= 10  # Moderate onshore = noticeable chop
+        elif wind_speed <= 10:
+            score -= 18  # Above 7kn = heavy negative
+        elif wind_speed <= 15:
+            score -= 25  # Strong onshore = rough
+        elif wind_speed <= 20:
+            score -= 32  # Very strong onshore = blown out
         else:
-            score -= 12  # Getting rough
-    elif wind_speed <= 20:
-        if offshore:
-            score -= 5  # Even offshore is pushy
-        else:
-            score -= 20  # Blown out
+            score -= 40  # Extreme onshore = unsurfable
     else:
-        score -= 30  # Too windy regardless
+        # Cross-shore (between onshore and offshore)
+        if wind_speed <= 7:
+            score += 5   # Light cross = okay
+        elif wind_speed <= 12:
+            score -= 5   # Moderate cross = some texture
+        elif wind_speed <= 18:
+            score -= 15  # Strong cross = rough
+        else:
+            score -= 25  # Very strong cross = blown out
     
     # Gust penalty (gusty conditions are worse than steady)
     gust_diff = wind_gusts - wind_speed
     if gust_diff > 10:
-        score -= 8  # Very gusty
+        score -= 10  # Very gusty
     elif gust_diff > 5:
-        score -= 4  # Moderately gusty
+        score -= 5   # Moderately gusty
     
     # =========================================================================
     # SECONDARY SWELL
@@ -232,24 +265,28 @@ def label_surf_score(
         score += 10
     
     # Low tide + small waves = very bad (compounds)
-    if tide_height < 1.5 and wave_height < 2.5:
-        score -= 15
+    if tide_height < 2.2 and wave_height < 2.5:
+        score -= 18  # Both factors bad = compounds
     
     # Offshore wind saves marginal conditions
-    if offshore and (wave_height < 3 or tide_height < 2):
-        score += 6
+    if offshore and wind_speed <= 15 and (wave_height < 3 or tide_height < 2.5):
+        score += 8  # Light offshore helps marginal conditions
     
     # Big waves + good tide = bonus
     if wave_height >= 5 and tide_height >= 3 and tide_height <= 4.5:
         score += 5
     
     # Long period + low tide = closes out harder
-    if wave_period > 12 and tide_height < 2:
-        score -= 10
+    if wave_period > 12 and tide_height < 2.2:
+        score -= 12
     
-    # Short period + onshore = miserable
-    if wave_period < 8 and not offshore and wind_speed > 10:
-        score -= 8
+    # Short period (<6s) + onshore = miserable
+    if wave_period < 6 and onshore and wind_speed > 7:
+        score -= 15  # Worst combo
+    
+    # Short period + any wind above light = bad
+    if wave_period < 6 and wind_speed > 10:
+        score -= 10
     
     # Perfect combo bonus
     if (wave_height >= 3 and wave_height <= 5 and

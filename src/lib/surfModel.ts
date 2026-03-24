@@ -1,7 +1,5 @@
-// Auto-generated surf model inference
-// Trained on synthetic data for Folly Beach (13th Street)
-
-import lookupData from '../data/model_lookup.json';
+// Surf model inference with score breakdown
+// Based on Marc's preferences for Folly Beach (13th Street)
 
 export interface SurfInput {
   waveHeight: number;
@@ -19,64 +17,261 @@ export interface SurfInput {
   waterTemp?: number;
 }
 
-interface LookupData {
-  grids: Record<string, number[]>;
-  defaults: Record<string, number>;
-  scores: Record<string, number>;
+export interface ScoreBreakdown {
+  total: number;
+  factors: {
+    height: { score: number; note: string };
+    period: { score: number; note: string };
+    tide: { score: number; note: string };
+    wind: { score: number; note: string };
+  };
+  notes: string[];
 }
 
-const lookup = lookupData as LookupData;
+/**
+ * Check if wind is offshore at Folly Beach.
+ * Offshore: WSW (247.5°), W (270°), WNW (292.5°), NW (315°), N (0/360°)
+ */
+function isOffshore(windDir: number): boolean {
+  return (windDir >= 247.5 && windDir <= 360) || (windDir >= 0 && windDir <= 22.5);
+}
 
 /**
- * Find the nearest index in a sorted array
+ * Check if wind is onshore at Folly Beach.
+ * Onshore: NE (45°), ENE (67.5°), E (90°), ESE (112.5°), SE (135°), S (180°), SW (225°)
  */
-function findNearestIndex(arr: number[], val: number): number {
-  if (val <= arr[0]) return 0;
-  if (val >= arr[arr.length - 1]) return arr.length - 1;
+function isOnshore(windDir: number): boolean {
+  return windDir >= 45 && windDir <= 225;
+}
+
+function directionToCardinal(deg: number): string {
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 
+                'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
+/**
+ * Calculate surf score with detailed breakdown
+ */
+export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdown {
+  const notes: string[] = [];
+  let total = 50;
+
+  // === WAVE HEIGHT ===
+  const h = input.waveHeight;
+  let heightScore = 0;
+  let heightNote = '';
   
-  let best = 0;
-  let bestDist = Math.abs(arr[0] - val);
+  if (h >= 3 && h <= 6) {
+    heightScore = 25;
+    heightNote = `${h}ft - sweet spot`;
+  } else if (h >= 2 && h < 3) {
+    heightScore = 12;
+    heightNote = `${h}ft - decent size`;
+  } else if (h >= 1.5 && h < 2) {
+    heightScore = -5;
+    heightNote = `${h}ft - small`;
+  } else if (h < 1.5) {
+    heightScore = -30;
+    heightNote = `${h}ft - too small`;
+    notes.push('Waves too small');
+  } else if (h > 6 && h <= 8) {
+    heightScore = 18;
+    heightNote = `${h}ft - solid`;
+  } else if (h > 8) {
+    heightScore = h > 10 ? -10 : 8;
+    heightNote = `${h}ft - ${h > 10 ? 'very big' : 'big'}`;
+  }
+  total += heightScore;
+
+  // === WAVE PERIOD ===
+  const p = input.wavePeriod;
+  let periodScore = 0;
+  let periodNote = '';
   
-  for (let i = 1; i < arr.length; i++) {
-    const dist = Math.abs(arr[i] - val);
-    if (dist < bestDist) {
-      best = i;
-      bestDist = dist;
+  if (p >= 10 && p <= 13) {
+    periodScore = 22;
+    periodNote = `${p}s - ideal for Folly`;
+  } else if (p >= 8 && p < 10) {
+    periodScore = 12;
+    periodNote = `${p}s - good`;
+  } else if (p >= 7 && p < 8) {
+    periodScore = 5;
+    periodNote = `${p}s - okay`;
+  } else if (p >= 6 && p < 7) {
+    periodScore = -8;
+    periodNote = `${p}s - short, choppy`;
+  } else if (p < 6) {
+    periodScore = -25;
+    periodNote = `${p}s - very short`;
+    notes.push('Short period - poor quality');
+  } else if (p > 13 && p <= 15) {
+    periodScore = -8;
+    periodNote = `${p}s - closes out`;
+  } else {
+    periodScore = -15;
+    periodNote = `${p}s - too long`;
+  }
+  total += periodScore;
+
+  // === TIDE HEIGHT ===
+  const t = input.tideHeight;
+  let tideScore = 0;
+  let tideNote = '';
+  
+  if (t < 0.5) {
+    tideScore = -40;
+    tideNote = `${t.toFixed(1)}ft - too low`;
+    notes.push('Tide too low');
+  } else if (t < 1.0) {
+    tideScore = -32;
+    tideNote = `${t.toFixed(1)}ft - very low`;
+    notes.push('Tide very low');
+  } else if (t < 1.5) {
+    tideScore = -25;
+    tideNote = `${t.toFixed(1)}ft - low`;
+    notes.push('Low tide');
+  } else if (t < 2.0) {
+    tideScore = -18;
+    tideNote = `${t.toFixed(1)}ft - still low`;
+  } else if (t < 2.2) {
+    tideScore = -12;
+    tideNote = `${t.toFixed(1)}ft - below ideal`;
+  } else if (t >= 3.0 && t <= 4.0) {
+    tideScore = 12;
+    tideNote = `${t.toFixed(1)}ft - sweet spot`;
+  } else if (t >= 2.5 && t < 3.0) {
+    tideScore = 8;
+    tideNote = `${t.toFixed(1)}ft - good`;
+  } else if (t >= 2.2 && t < 2.5) {
+    tideScore = 4;
+    tideNote = `${t.toFixed(1)}ft - decent`;
+  } else if (t > 4.0 && t <= 5.0) {
+    tideScore = 5;
+    tideNote = `${t.toFixed(1)}ft - high but ok`;
+  } else if (t > 5.0) {
+    tideScore = t > 5.5 ? -8 : -3;
+    tideNote = `${t.toFixed(1)}ft - ${t > 5.5 ? 'too high' : 'high'}`;
+  }
+  
+  // Rising tide bonus
+  if (input.tideRising && t >= 2.2 && t <= 4.5) {
+    tideScore += 6;
+    tideNote += ' ↑';
+  }
+  total += tideScore;
+
+  // === WIND ===
+  const ws = input.windSpeed;
+  const offshore = isOffshore(input.windDirection);
+  const onshore = isOnshore(input.windDirection);
+  const windDir = directionToCardinal(input.windDirection);
+  let windScore = 0;
+  let windNote = '';
+
+  if (ws <= 3) {
+    windScore = 15;
+    windNote = `${ws}kn ${windDir} - glassy`;
+    notes.push('Glassy conditions');
+  } else if (offshore) {
+    if (ws <= 7) {
+      windScore = 12;
+      windNote = `${ws}kn ${windDir} - light offshore`;
+      notes.push('Light offshore 🌬️');
+    } else if (ws <= 10) {
+      windScore = 10;
+      windNote = `${ws}kn ${windDir} - offshore`;
+    } else if (ws <= 15) {
+      windScore = 5;
+      windNote = `${ws}kn ${windDir} - moderate offshore`;
+    } else if (ws <= 20) {
+      windScore = -5;
+      windNote = `${ws}kn ${windDir} - strong offshore`;
+      notes.push('Strong offshore');
+    } else {
+      windScore = -20;
+      windNote = `${ws}kn ${windDir} - too strong`;
+      notes.push('Wind too strong');
+    }
+  } else if (onshore) {
+    if (ws <= 5) {
+      windScore = -5;
+      windNote = `${ws}kn ${windDir} - light onshore`;
+    } else if (ws <= 7) {
+      windScore = -10;
+      windNote = `${ws}kn ${windDir} - onshore`;
+    } else if (ws <= 10) {
+      windScore = -18;
+      windNote = `${ws}kn ${windDir} - onshore >7kn`;
+      notes.push('Onshore wind >7kn');
+    } else if (ws <= 15) {
+      windScore = -25;
+      windNote = `${ws}kn ${windDir} - strong onshore`;
+      notes.push('Strong onshore');
+    } else {
+      windScore = -35;
+      windNote = `${ws}kn ${windDir} - blown out`;
+      notes.push('Blown out');
+    }
+  } else {
+    // Cross-shore
+    if (ws <= 7) {
+      windScore = 5;
+      windNote = `${ws}kn ${windDir} - light cross`;
+    } else if (ws <= 12) {
+      windScore = -5;
+      windNote = `${ws}kn ${windDir} - cross`;
+    } else {
+      windScore = -15;
+      windNote = `${ws}kn ${windDir} - strong cross`;
     }
   }
-  
-  return best;
+
+  // Gust penalty
+  const gusts = input.windGusts ?? ws;
+  if (gusts - ws > 10) {
+    windScore -= 10;
+    windNote += ' (gusty)';
+  } else if (gusts - ws > 5) {
+    windScore -= 5;
+  }
+  total += windScore;
+
+  // === INTERACTION PENALTIES ===
+  if (t < 2.2 && h < 2.5) {
+    total -= 18;
+    notes.push('Low tide + small waves');
+  }
+  if (p < 6 && onshore && ws > 7) {
+    total -= 15;
+    notes.push('Short period + onshore');
+  }
+  if (p < 6 && ws > 10) {
+    total -= 10;
+  }
+  if (offshore && ws <= 15 && (h < 3 || t < 2.5)) {
+    total += 8;
+  }
+
+  return {
+    total: Math.max(0, Math.min(100, Math.round(total))),
+    factors: {
+      height: { score: heightScore, note: heightNote },
+      period: { score: periodScore, note: periodNote },
+      tide: { score: tideScore, note: tideNote },
+      wind: { score: windScore, note: windNote },
+    },
+    notes: notes.slice(0, 4),
+  };
 }
 
 /**
- * Calculate surf score using lookup table with nearest-neighbor lookup
+ * Simple score calculation (for compatibility)
  */
 export function calculateSurfScore(input: SurfInput): number {
-  // Find nearest grid points
-  const h = lookup.grids.wave_height[findNearestIndex(lookup.grids.wave_height, input.waveHeight)];
-  const p = lookup.grids.wave_period[findNearestIndex(lookup.grids.wave_period, input.wavePeriod)];
-  const t = lookup.grids.tide_height[findNearestIndex(lookup.grids.tide_height, input.tideHeight)];
-  const ws = lookup.grids.wind_speed[findNearestIndex(lookup.grids.wind_speed, input.windSpeed)];
-  const wd = lookup.grids.wind_direction[findNearestIndex(lookup.grids.wind_direction, input.windDirection)];
-  const tr = input.tideRising ? 1 : 0;
-  
-  // Build key
-  const key = `${h}_${p}_${t}_${ws}_${wd}_${tr}`;
-  
-  // Lookup
-  const score = lookup.scores[key];
-  
-  if (score === undefined) {
-    console.warn('Lookup miss for key:', key);
-    return 50; // Default neutral
-  }
-  
-  return score;
+  return calculateSurfScoreWithBreakdown(input).total;
 }
 
-/**
- * Get rating string from score
- */
 export function getSurfRating(score: number): string {
   if (score >= 85) return "Excellent";
   if (score >= 70) return "Great";
@@ -86,9 +281,6 @@ export function getSurfRating(score: number): string {
   return "Very Poor";
 }
 
-/**
- * Get rating color
- */
 export function getRatingColor(score: number): string {
   if (score >= 85) return "text-green-400";
   if (score >= 70) return "text-green-300";

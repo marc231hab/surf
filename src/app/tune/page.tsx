@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { calculateSurfScore, getSurfRating, getRatingColor } from '@/lib/surfModel';
+import { calculateSurfScoreWithBreakdown, getSurfRating, getRatingColor } from '@/lib/surfModel';
 
 interface FeatureConfig {
   name: string;
@@ -143,8 +143,8 @@ export default function TunePage() {
     setFeedback({ adjustment: 0, submitted: false });
   }, []);
 
-  // Calculate score
-  const score = calculateSurfScore({
+  // Calculate score with breakdown
+  const breakdown = calculateSurfScoreWithBreakdown({
     waveHeight: values.waveHeight,
     wavePeriod: values.wavePeriod,
     waveDirection: values.waveDirection,
@@ -156,6 +156,7 @@ export default function TunePage() {
     waterTemp: values.waterTemp,
   });
 
+  const score = breakdown.total;
   const rating = getSurfRating(score);
   const colorClass = getRatingColor(score);
 
@@ -191,9 +192,54 @@ export default function TunePage() {
         </p>
 
         {/* Score Display */}
-        <div className="bg-zinc-800 rounded-xl p-6 mb-8 text-center">
-          <div className={`text-7xl font-bold mb-2 ${colorClass}`}>{score}</div>
-          <div className={`text-2xl ${colorClass}`}>{rating}</div>
+        <div className="bg-zinc-800 rounded-xl p-6 mb-8">
+          <div className="text-center">
+            <div className={`text-7xl font-bold mb-2 ${colorClass}`}>{score}</div>
+            <div className={`text-2xl ${colorClass}`}>{rating}</div>
+          </div>
+          
+          {/* Score Breakdown */}
+          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-zinc-700 rounded-lg p-3 text-center">
+              <div className={`text-xl font-bold ${breakdown.factors.height.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {breakdown.factors.height.score > 0 ? '+' : ''}{breakdown.factors.height.score}
+              </div>
+              <div className="text-xs text-zinc-400">Height</div>
+              <div className="text-xs text-zinc-500 mt-1">{breakdown.factors.height.note}</div>
+            </div>
+            <div className="bg-zinc-700 rounded-lg p-3 text-center">
+              <div className={`text-xl font-bold ${breakdown.factors.period.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {breakdown.factors.period.score > 0 ? '+' : ''}{breakdown.factors.period.score}
+              </div>
+              <div className="text-xs text-zinc-400">Period</div>
+              <div className="text-xs text-zinc-500 mt-1">{breakdown.factors.period.note}</div>
+            </div>
+            <div className="bg-zinc-700 rounded-lg p-3 text-center">
+              <div className={`text-xl font-bold ${breakdown.factors.tide.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {breakdown.factors.tide.score > 0 ? '+' : ''}{breakdown.factors.tide.score}
+              </div>
+              <div className="text-xs text-zinc-400">Tide</div>
+              <div className="text-xs text-zinc-500 mt-1">{breakdown.factors.tide.note}</div>
+            </div>
+            <div className="bg-zinc-700 rounded-lg p-3 text-center">
+              <div className={`text-xl font-bold ${breakdown.factors.wind.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {breakdown.factors.wind.score > 0 ? '+' : ''}{breakdown.factors.wind.score}
+              </div>
+              <div className="text-xs text-zinc-400">Wind</div>
+              <div className="text-xs text-zinc-500 mt-1">{breakdown.factors.wind.note}</div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          {breakdown.notes.length > 0 && (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {breakdown.notes.map((note, i) => (
+                <span key={i} className="text-sm bg-zinc-600 px-3 py-1 rounded-full">
+                  {note}
+                </span>
+              ))}
+            </div>
+          )}
           
           {/* Feedback Controls */}
           <div className="mt-6 flex items-center justify-center gap-4">
@@ -220,14 +266,14 @@ export default function TunePage() {
           {feedback.adjustment !== 0 && !feedback.submitted && (
             <button
               onClick={submitFeedback}
-              className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
+              className="mt-4 w-full px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
             >
               Submit Feedback (Final: {Math.max(0, Math.min(100, score + feedback.adjustment))})
             </button>
           )}
 
           {feedback.submitted && (
-            <div className="mt-4 text-green-400">✓ Feedback recorded</div>
+            <div className="mt-4 text-center text-green-400">✓ Feedback recorded</div>
           )}
         </div>
 

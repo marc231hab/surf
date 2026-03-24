@@ -1,5 +1,5 @@
 import { fetchBlendedConditions } from '@/lib/buoys';
-import { calculateSurfScore, getSurfRating, getRatingColor } from '@/lib/surfModel';
+import { calculateSurfScoreWithBreakdown, getSurfRating, getRatingColor } from '@/lib/surfModel';
 import Link from 'next/link';
 
 export const revalidate = 300; // 5 minutes
@@ -32,7 +32,7 @@ export default async function ForecastPage() {
     );
   }
 
-  const score = calculateSurfScore({
+  const breakdown = calculateSurfScoreWithBreakdown({
     waveHeight: conditions.waveHeight,
     wavePeriod: conditions.wavePeriod,
     waveDirection: conditions.waveDirection,
@@ -48,6 +48,7 @@ export default async function ForecastPage() {
     waterTemp: conditions.waterTemp,
   });
 
+  const score = breakdown.total;
   const rating = getSurfRating(score);
   const colorClass = getRatingColor(score);
   const offshore = isOffshore(conditions.windDirection);
@@ -70,9 +71,56 @@ export default async function ForecastPage() {
           <h1 className="text-zinc-400 text-lg mb-2">13th Street / The Washout</h1>
           <div className={`text-8xl font-bold mb-2 ${colorClass}`}>{score}</div>
           <div className={`text-3xl font-semibold ${colorClass}`}>{rating}</div>
+          
+          {/* Score Notes */}
+          {breakdown.notes.length > 0 && (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              {breakdown.notes.map((note, i) => (
+                <span key={i} className="text-sm bg-zinc-700 px-3 py-1 rounded-full">
+                  {note}
+                </span>
+              ))}
+            </div>
+          )}
+          
           <p className="text-zinc-500 mt-4 text-sm">
             Updated {new Date(conditions.timestamp).toLocaleTimeString()}
           </p>
+        </div>
+
+        {/* Score Breakdown */}
+        <div className="bg-zinc-800 rounded-xl p-6 mb-8">
+          <h2 className="text-lg font-semibold mb-4">Score Breakdown</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${breakdown.factors.height.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {breakdown.factors.height.score > 0 ? '+' : ''}{breakdown.factors.height.score}
+              </div>
+              <div className="text-xs text-zinc-400 mt-1">Height</div>
+              <div className="text-xs text-zinc-500">{breakdown.factors.height.note}</div>
+            </div>
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${breakdown.factors.period.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {breakdown.factors.period.score > 0 ? '+' : ''}{breakdown.factors.period.score}
+              </div>
+              <div className="text-xs text-zinc-400 mt-1">Period</div>
+              <div className="text-xs text-zinc-500">{breakdown.factors.period.note}</div>
+            </div>
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${breakdown.factors.tide.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {breakdown.factors.tide.score > 0 ? '+' : ''}{breakdown.factors.tide.score}
+              </div>
+              <div className="text-xs text-zinc-400 mt-1">Tide</div>
+              <div className="text-xs text-zinc-500">{breakdown.factors.tide.note}</div>
+            </div>
+            <div className="text-center">
+              <div className={`text-2xl font-bold ${breakdown.factors.wind.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {breakdown.factors.wind.score > 0 ? '+' : ''}{breakdown.factors.wind.score}
+              </div>
+              <div className="text-xs text-zinc-400 mt-1">Wind</div>
+              <div className="text-xs text-zinc-500">{breakdown.factors.wind.note}</div>
+            </div>
+          </div>
         </div>
 
         {/* Conditions Grid */}
