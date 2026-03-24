@@ -36,6 +36,25 @@ def angle_difference(a: float, b: float) -> float:
     diff = abs(a - b) % 360
     return min(diff, 360 - diff)
 
+def interpolate(value: float, points: list) -> float:
+    """Linear interpolation between defined points. Points = [(x, y), ...]"""
+    sorted_pts = sorted(points, key=lambda p: p[0])
+    
+    # Clamp to range
+    if value <= sorted_pts[0][0]:
+        return sorted_pts[0][1]
+    if value >= sorted_pts[-1][0]:
+        return sorted_pts[-1][1]
+    
+    # Find surrounding points and interpolate
+    for i in range(len(sorted_pts) - 1):
+        x1, y1 = sorted_pts[i]
+        x2, y2 = sorted_pts[i + 1]
+        if x1 <= value <= x2:
+            t = (value - x1) / (x2 - x1)
+            return y1 + t * (y2 - y1)
+    return 0
+
 def is_offshore_wind(wind_dir: float) -> bool:
     """
     Check if wind is offshore at Folly Beach.
@@ -69,185 +88,146 @@ def label_surf_score(
 ) -> float:
     """
     Generate happiness score (0-100) based on Marc's preferences for Folly Beach.
-    This is the "expert labeling function" that encodes domain knowledge.
+    Uses smooth interpolation curves - no hard brackets.
     """
     score = 50.0  # Start neutral
     
     # =========================================================================
-    # WAVE HEIGHT (most important factor)
-    # Need at least 2.5ft for good surf, 3ft+ for great
+    # WAVE HEIGHT (smooth curve)
     # =========================================================================
-    if wave_height >= 3.5 and wave_height <= 6:
-        score += 25  # Sweet spot
-    elif wave_height >= 3 and wave_height < 3.5:
-        score += 18  # Good size
-    elif wave_height >= 2.5 and wave_height < 3:
-        score += 10  # Decent
-    elif wave_height >= 2 and wave_height < 2.5:
-        score -= 5   # Small
-    elif wave_height >= 1.5 and wave_height < 2:
-        score -= 18  # Below 2ft - not great
-    elif wave_height >= 1 and wave_height < 1.5:
-        score -= 28  # Very small - hard to catch
-    elif wave_height < 1:
-        score -= 40  # Too small to surf
-    elif wave_height > 6 and wave_height <= 8:
-        score += 18  # Solid day
-    elif wave_height > 8 and wave_height <= 10:
-        score += 8   # Big, need experience
-    elif wave_height > 10:
-        score -= 10  # Too big for most
+    height_curve = [
+        (0, -35),    # flat
+        (1, -22),    # too small
+        (1.5, -15),  # very small
+        (2, -6),     # small
+        (2.5, 8),    # decent
+        (3, 15),     # good
+        (3.5, 22),   # great
+        (5, 25),     # sweet spot peak
+        (6, 22),     # still great
+        (8, 15),     # big but good
+        (10, 5),     # very big
+        (12, -10),   # too big
+    ]
+    score += interpolate(wave_height, height_curve)
     
     # =========================================================================
-    # WAVE PERIOD (critical for wave quality)
+    # WAVE PERIOD (smooth curve)
     # =========================================================================
-    # Folly works best with 10-13s, 14-15s can close out, >15s not ideal
-    # Short period = choppy/weak waves
-    if wave_period >= 10 and wave_period <= 13:
-        score += 22  # Sweet spot for Folly
-    elif wave_period >= 8 and wave_period < 10:
-        score += 10  # Good
-    elif wave_period >= 7 and wave_period < 8:
-        score += 0   # Okay
-    elif wave_period >= 6 and wave_period < 7:
-        score -= 15  # Short period, choppy
-    elif wave_period < 6:
-        score -= 30  # Very short period - poor quality waves
-    elif wave_period > 13 and wave_period <= 15:
-        score -= 8   # Closes out at Folly
-    elif wave_period > 15:
-        score -= 15  # Too long, not ideal for this beach
+    period_curve = [
+        (3, -30),    # wind chop
+        (5, -20),    # very short
+        (6, -12),    # short
+        (7, -2),     # okay
+        (8, 8),      # good
+        (10, 18),    # great
+        (12, 22),    # ideal peak
+        (13, 18),    # still great
+        (14, 5),     # starting to close out
+        (15, -5),    # closes out
+        (17, -15),   # too long
+    ]
+    score += interpolate(wave_period, period_curve)
     
     # =========================================================================
-    # WAVE DIRECTION (specific to Folly Beach 13th Street)
+    # WAVE DIRECTION (smooth curve for Folly Beach)
     # =========================================================================
-    # 190-160°: best (S to SSE swells)
-    # 160-130°: okay but can close out (SSE to SE)
-    # 130-110°: can be great (SE to ESE)
-    # 200-190°: okay but shadowed/drifty (S to SSW)
-    # 110-75°: shadowed by jetties, very drifty (ESE to ENE)
-    # Everything else: offshore/doesn't work
-    # =========================================================================
-    wd = wave_direction
-    if wd >= 160 and wd <= 190:
-        score += 15  # Best direction - S to SSE
-    elif wd >= 130 and wd < 160:
-        score += 8   # SSE to SE - okay but can close out
-    elif wd >= 110 and wd < 130:
-        score += 12  # SE to ESE - can be great
-    elif wd > 190 and wd <= 200:
-        score += 5   # S to SSW - okay but shadowed/drifty
-    elif wd >= 75 and wd < 110:
-        score -= 8   # ESE to ENE - shadowed by jetties, drifty
-    else:
-        # Offshore directions or way off - doesn't work
-        score -= 20  # Wrong direction for this beach
+    dir_curve = [
+        (0, -20),    # N - offshore, doesn't work
+        (45, -18),   # NE - wrong angle
+        (75, -8),    # ENE - jetty shadow starts
+        (90, -6),    # E - shadowed
+        (110, 8),    # ESE - can be great
+        (130, 10),   # SE - good
+        (150, 12),   # SSE - very good
+        (175, 15),   # S - ideal
+        (190, 12),   # SSW - still good
+        (200, 5),    # SW - shadowed/drifty
+        (220, -5),   # WSW - not great
+        (250, -15),  # W - offshore direction
+        (300, -20),  # NW - wrong
+        (360, -20),  # N - wrong
+    ]
+    score += interpolate(wave_direction, dir_curve)
     
     # =========================================================================
-    # TIDE HEIGHT (3.5ft optimal for Folly)
-    # Below 2.2ft = low scores (heavy penalty)
+    # TIDE HEIGHT (smooth curve)
     # =========================================================================
-    if tide_height < 0.5:
-        score -= 40  # Almost unsurfable
-    elif tide_height < 1.0:
-        score -= 32  # Very low, closing out on sandbars
-    elif tide_height < 1.5:
-        score -= 25  # Low, poor conditions
-    elif tide_height < 2.0:
-        score -= 18  # Still too low
-    elif tide_height < 2.2:
-        score -= 12  # Below threshold, not great
-    elif tide_height >= 3.0 and tide_height <= 4.0:
-        score += 12  # Sweet spot
-    elif tide_height >= 2.5 and tide_height < 3.0:
-        score += 8   # Good
-    elif tide_height >= 2.2 and tide_height < 2.5:
-        score += 4   # Decent, above threshold
-    elif tide_height > 4.0 and tide_height <= 5.0:
-        score += 5   # High but workable
-    elif tide_height > 5.0 and tide_height <= 5.5:
-        score -= 3   # Getting too high
-    elif tide_height > 5.5:
-        score -= 8   # Too high
+    tide_curve = [
+        (0, -40),    # too low
+        (0.5, -30),  # very low
+        (1, -20),    # low
+        (1.5, -12),  # still low
+        (2, -4),     # below ideal
+        (2.5, 6),    # decent
+        (3, 12),     # good
+        (3.5, 14),   # sweet spot
+        (4, 12),     # still good
+        (4.5, 6),    # getting high
+        (5, 0),      # high
+        (5.5, -6),   # too high
+        (6, -12),    # way too high
+    ]
+    score += interpolate(tide_height, tide_curve)
     
-    # Tide direction bonus (only if above 2.2ft threshold)
-    if tide_rising and tide_height >= 2.2 and tide_height <= 4.5:
-        score += 6  # Rising tide is cleaner
+    # Rising vs falling tide modifier
+    rising_bonus = 8 if tide_rising else -6
+    tide_range_factor = 1.0 if (2 <= tide_height <= 4.5) else 0.5
+    score += rising_bonus * tide_range_factor
     
     # =========================================================================
-    # WIND SPEED & DIRECTION
-    # =========================================================================
-    # Onshore: NE, ENE, E, ESE, SE, S, SW (45° - 225°)
-    #   - Any onshore = negative impact
-    #   - Above 7kn = heavy negative impact
-    # Offshore: WSW, W, WNW, NW, N (247.5° - 360° and 0° - 22.5°)
-    #   - Below 15kn = positive impact
-    #   - Above 15kn = negative impact
+    # WIND (smooth curves based on direction)
     # =========================================================================
     offshore = is_offshore_wind(wind_direction)
     onshore = is_onshore_wind(wind_direction)
     
-    if wind_speed <= 3:
-        score += 15  # Glassy, direction doesn't matter much
-    elif offshore:
-        # Offshore wind
-        if wind_speed <= 7:
-            score += 12  # Light offshore = excellent
-        elif wind_speed <= 10:
-            score += 10  # Moderate offshore = great
-        elif wind_speed <= 15:
-            score += 5   # Stronger offshore = still good
-        elif wind_speed <= 20:
-            score -= 5   # Strong offshore = getting pushy
-        elif wind_speed <= 25:
-            score -= 12  # Very strong offshore = too much
-        else:
-            score -= 20  # Extreme offshore = dangerous
-    elif onshore:
-        # Onshore wind - always negative, heavy if >7kn
-        if wind_speed <= 5:
-            score -= 5   # Light onshore = minor texture
-        elif wind_speed <= 7:
-            score -= 10  # Moderate onshore = noticeable chop
-        elif wind_speed <= 10:
-            score -= 18  # Above 7kn = heavy negative
-        elif wind_speed <= 15:
-            score -= 25  # Strong onshore = rough
-        elif wind_speed <= 20:
-            score -= 32  # Very strong onshore = blown out
-        else:
-            score -= 40  # Extreme onshore = unsurfable
-    else:
-        # Cross-shore (between onshore and offshore)
-        if wind_speed <= 7:
-            score += 5   # Light cross = okay
-        elif wind_speed <= 12:
-            score -= 5   # Moderate cross = some texture
-        elif wind_speed <= 18:
-            score -= 15  # Strong cross = rough
-        else:
-            score -= 25  # Very strong cross = blown out
+    offshore_curve = [
+        (0, 15),    # glassy
+        (5, 14),    # light offshore - great
+        (10, 10),   # moderate offshore - good
+        (15, 3),    # stronger offshore
+        (20, -8),   # too strong
+        (25, -20),  # way too strong
+    ]
+    onshore_curve = [
+        (0, 15),    # glassy (no direction matters)
+        (3, 8),     # barely onshore
+        (6, -2),    # light onshore
+        (10, -12),  # moderate onshore
+        (15, -22),  # strong onshore
+        (20, -30),  # blown out
+    ]
+    cross_curve = [
+        (0, 15),    # glassy
+        (5, 8),     # light cross
+        (10, 0),    # moderate cross
+        (15, -10),  # strong cross
+        (20, -20),  # too strong
+    ]
     
-    # Gust penalty (gusty conditions are worse than steady)
+    if wind_speed <= 3:
+        score += 15  # Glassy - direction doesn't matter
+    elif offshore:
+        score += interpolate(wind_speed, offshore_curve)
+    elif onshore:
+        score += interpolate(wind_speed, onshore_curve)
+    else:
+        score += interpolate(wind_speed, cross_curve)
+    
+    # Gust penalty (smooth)
     gust_diff = wind_gusts - wind_speed
-    if gust_diff > 10:
-        score -= 10  # Very gusty
-    elif gust_diff > 5:
-        score -= 5   # Moderately gusty
+    gust_penalty_curve = [(0, 0), (5, -3), (10, -8), (15, -12)]
+    score += interpolate(gust_diff, gust_penalty_curve)
     
     # =========================================================================
     # SECONDARY SWELL
     # =========================================================================
     if secondary_swell_height > 0.5:
-        # Secondary swell present
         sec_dir_diff = angle_difference(secondary_swell_direction, wave_direction)
-        
         if sec_dir_diff > 60:
-            # Crossing swells - can create confusion
-            if secondary_swell_height > 2:
-                score -= 10  # Significant crossing swell, messy
-            else:
-                score -= 4   # Minor crossing swell
+            # Crossing swells - smooth penalty based on height
+            crossing_penalty = interpolate(secondary_swell_height, [(0.5, -2), (2, -6), (4, -12)])
+            score += crossing_penalty
         else:
             # Similar direction - can reinforce
             if secondary_swell_period >= 8:
@@ -256,67 +236,56 @@ def label_surf_score(
                 score -= 2  # Short period secondary adds chop
     
     # =========================================================================
-    # WATER TEMPERATURE (comfort factor)
+    # WATER TEMPERATURE (smooth curve - comfort factor)
     # =========================================================================
-    if water_temp >= 75:
-        score += 5   # Warm, comfortable
-    elif water_temp >= 68:
-        score += 3   # Nice
-    elif water_temp >= 60:
-        score += 0   # Wetsuit needed but fine
-    elif water_temp >= 55:
-        score -= 3   # Cold
-    elif water_temp >= 50:
-        score -= 6   # Very cold
-    else:
-        score -= 10  # Brutal
+    temp_curve = [
+        (45, -10),   # brutal
+        (50, -6),    # very cold
+        (55, -3),    # cold
+        (60, 0),     # wetsuit needed
+        (68, 3),     # nice
+        (75, 5),     # warm
+        (85, 5),     # warm
+    ]
+    score += interpolate(water_temp, temp_curve)
     
     # =========================================================================
-    # INTERACTION TERMS
+    # INTERACTION TERMS (smooth multipliers)
     # =========================================================================
     
-    # Small waves + short period = not worth it
+    # Small waves + short period penalty (multiplicative feel)
     if wave_height < 2.5 and wave_period < 7:
-        score -= 15
-    if wave_height < 2 and wave_period < 8:
-        score -= 10  # Extra penalty for very small
+        # Penalty scales with how bad each factor is
+        height_badness = max(0, (2.5 - wave_height) / 1.5)  # 0 to 1
+        period_badness = max(0, (7 - wave_period) / 3)      # 0 to 1
+        score -= height_badness * period_badness * 15
     
-    # Small waves + long period = surprisingly ok
-    if wave_height < 3 and wave_height >= 2 and wave_period >= 11:
-        score += 8
+    # Low tide + small waves compound
+    if tide_height < 2.5 and wave_height < 2.5:
+        tide_badness = max(0, (2.5 - tide_height) / 2)
+        height_badness = max(0, (2.5 - wave_height) / 1.5)
+        score -= tide_badness * height_badness * 12
     
-    # Low tide + small waves = very bad (compounds)
-    if tide_height < 2.2 and wave_height < 2.5:
-        score -= 15  # Both factors bad = compounds
-    
-    # Offshore wind bonus only when waves are rideable
-    if offshore and wind_speed <= 10 and wave_height >= 2.5 and wave_period >= 7:
-        score += 5  # Light offshore helps decent conditions
-    
-    # Big waves + good tide = bonus
-    if wave_height >= 5 and tide_height >= 3 and tide_height <= 4.5:
+    # Offshore wind bonus only when conditions are decent
+    if offshore and wind_speed <= 12 and wave_height >= 2.5 and wave_period >= 7:
         score += 5
     
-    # Long period + low tide = closes out harder
-    if wave_period > 12 and tide_height < 2.2:
-        score -= 12
+    # Short period + onshore = rough
+    if wave_period < 7 and onshore and wind_speed > 5:
+        period_badness = max(0, (7 - wave_period) / 3)
+        wind_badness = min(1, (wind_speed - 5) / 10)
+        score -= period_badness * wind_badness * 12
     
-    # Short period (<6s) + onshore = miserable
-    if wave_period < 6 and onshore and wind_speed > 7:
-        score -= 15  # Worst combo
+    # Perfect conditions bonus
+    good_direction = (130 <= wave_direction <= 190)
+    if (wave_height >= 3 and wave_period >= 9 and
+        2.5 <= tide_height <= 4.5 and wind_speed <= 10 and
+        (offshore or wind_speed <= 5) and good_direction):
+        score += 8
     
-    # Short period + any wind above light = bad
-    if wave_period < 6 and wind_speed > 10:
-        score -= 10
-    
-    # Perfect combo bonus (best wave direction is 160-190°)
-    good_direction = (wave_direction >= 130 and wave_direction <= 190)
-    if (wave_height >= 3 and wave_height <= 5 and
-        wave_period >= 10 and wave_period <= 12 and
-        tide_height >= 2.5 and tide_height <= 4 and
-        wind_speed <= 10 and offshore and
-        good_direction):
-        score += 10  # Everything aligned
+    # Floor: 3ft+ waves should never be "Very Poor"
+    if wave_height >= 3 and score < 20:
+        score = 20
     
     return max(0, min(100, score))
 
