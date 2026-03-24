@@ -1,4 +1,5 @@
 import { fetchBlendedConditions } from '@/lib/buoys';
+import { fetch9DayForecast, type DayForecast } from '@/lib/forecast';
 import { calculateSurfScoreWithBreakdown, getSurfRating, getRatingColor } from '@/lib/surfModel';
 import Link from 'next/link';
 
@@ -12,11 +13,60 @@ function degreeToCardinal(deg: number): string {
 }
 
 function isOffshore(windDir: number): boolean {
-  return (windDir >= 250 && windDir <= 350) || windDir <= 20;
+  return (windDir >= 247.5 && windDir <= 360) || (windDir >= 0 && windDir <= 22.5);
+}
+
+function ForecastCard({ day }: { day: DayForecast }) {
+  return (
+    <div className="bg-zinc-800 rounded-xl p-4">
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <div className="font-semibold">{day.dayName}</div>
+          <div className="text-xs text-zinc-500">{day.date}</div>
+        </div>
+        <div className="text-right">
+          <div className={`text-2xl font-bold ${day.colorClass}`}>{day.score}</div>
+          <div className={`text-xs ${day.colorClass}`}>{day.rating}</div>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div>
+          <span className="text-zinc-500">Waves:</span>{' '}
+          <span className="font-mono">{day.waveHeight}ft @ {day.wavePeriod}s</span>
+        </div>
+        <div>
+          <span className="text-zinc-500">Dir:</span>{' '}
+          <span className="font-mono">{degreeToCardinal(day.waveDirection)} ({day.waveDirection}°)</span>
+        </div>
+        <div>
+          <span className="text-zinc-500">Wind:</span>{' '}
+          <span className="font-mono">{day.windSpeed}kn {degreeToCardinal(day.windDirection)}</span>
+        </div>
+        <div>
+          <span className="text-zinc-500">Tide:</span>{' '}
+          <span className="font-mono">{day.tideRange.low.toFixed(1)}-{day.tideRange.high.toFixed(1)}ft</span>
+        </div>
+      </div>
+      
+      {day.breakdown.notes.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {day.breakdown.notes.slice(0, 2).map((note, i) => (
+            <span key={i} className="text-xs bg-zinc-700 px-2 py-0.5 rounded">
+              {note}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default async function ForecastPage() {
-  const conditions = await fetchBlendedConditions();
+  const [conditions, forecast] = await Promise.all([
+    fetchBlendedConditions(),
+    fetch9DayForecast(),
+  ]);
 
   if (!conditions) {
     return (
@@ -66,185 +116,113 @@ export default async function ForecastPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        {/* Score Hero */}
-        <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-2xl p-8 mb-8 text-center">
-          <h1 className="text-zinc-400 text-lg mb-2">13th Street / The Washout</h1>
-          <div className={`text-8xl font-bold mb-2 ${colorClass}`}>{score}</div>
-          <div className={`text-3xl font-semibold ${colorClass}`}>{rating}</div>
+        {/* Current Conditions - Real Time */}
+        <div className="mb-8">
+          <h2 className="text-sm text-zinc-400 uppercase tracking-wide mb-3">Right Now (Real-Time)</h2>
           
-          {/* Score Notes */}
-          {breakdown.notes.length > 0 && (
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {breakdown.notes.map((note, i) => (
-                <span key={i} className="text-sm bg-zinc-700 px-3 py-1 rounded-full">
-                  {note}
-                </span>
+          <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-2xl p-6">
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              {/* Score */}
+              <div className="text-center md:text-left">
+                <div className="text-xs text-zinc-500 mb-1">13th Street / The Washout</div>
+                <div className={`text-6xl font-bold ${colorClass}`}>{score}</div>
+                <div className={`text-xl ${colorClass}`}>{rating}</div>
+              </div>
+              
+              {/* Breakdown */}
+              <div className="flex-1 grid grid-cols-4 gap-3">
+                <div className="bg-zinc-700/50 rounded-lg p-2 text-center">
+                  <div className={`text-lg font-bold ${breakdown.factors.height.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {breakdown.factors.height.score > 0 ? '+' : ''}{breakdown.factors.height.score}
+                  </div>
+                  <div className="text-xs text-zinc-400">Height</div>
+                </div>
+                <div className="bg-zinc-700/50 rounded-lg p-2 text-center">
+                  <div className={`text-lg font-bold ${breakdown.factors.period.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {breakdown.factors.period.score > 0 ? '+' : ''}{breakdown.factors.period.score}
+                  </div>
+                  <div className="text-xs text-zinc-400">Period</div>
+                </div>
+                <div className="bg-zinc-700/50 rounded-lg p-2 text-center">
+                  <div className={`text-lg font-bold ${breakdown.factors.tide.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {breakdown.factors.tide.score > 0 ? '+' : ''}{breakdown.factors.tide.score}
+                  </div>
+                  <div className="text-xs text-zinc-400">Tide</div>
+                </div>
+                <div className="bg-zinc-700/50 rounded-lg p-2 text-center">
+                  <div className={`text-lg font-bold ${breakdown.factors.wind.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {breakdown.factors.wind.score > 0 ? '+' : ''}{breakdown.factors.wind.score}
+                  </div>
+                  <div className="text-xs text-zinc-400">Wind</div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Notes */}
+            {breakdown.notes.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {breakdown.notes.map((note, i) => (
+                  <span key={i} className="text-sm bg-zinc-700 px-3 py-1 rounded-full">
+                    {note}
+                  </span>
+                ))}
+              </div>
+            )}
+            
+            {/* Current Details */}
+            <div className="mt-4 pt-4 border-t border-zinc-700 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="text-zinc-500">Waves:</span>{' '}
+                <span className="font-mono">{conditions.waveHeight}ft @ {conditions.wavePeriod}s</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Direction:</span>{' '}
+                <span className="font-mono">{degreeToCardinal(conditions.waveDirection)} ({conditions.waveDirection}°)</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Wind:</span>{' '}
+                <span className="font-mono">{conditions.windSpeed}kn {degreeToCardinal(conditions.windDirection)}</span>
+                {offshore && <span className="ml-1 text-green-400 text-xs">offshore</span>}
+              </div>
+              <div>
+                <span className="text-zinc-500">Tide:</span>{' '}
+                <span className="font-mono">{conditions.tideHeight.toFixed(1)}ft {conditions.tideRising ? '↑' : '↓'}</span>
+              </div>
+            </div>
+            
+            <div className="mt-3 text-xs text-zinc-500">
+              Updated {new Date(conditions.timestamp).toLocaleTimeString()} • 
+              {conditions.buoysUsed.length} buoys • 
+              {Math.round(conditions.confidence * 100)}% confidence
+            </div>
+          </div>
+        </div>
+
+        {/* 9-Day Forecast */}
+        <div>
+          <h2 className="text-sm text-zinc-400 uppercase tracking-wide mb-3">9-Day Forecast</h2>
+          
+          {forecast.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {forecast.map((day) => (
+                <ForecastCard key={day.date} day={day} />
               ))}
             </div>
+          ) : (
+            <div className="bg-zinc-800 rounded-xl p-6 text-center text-zinc-400">
+              Forecast data unavailable
+            </div>
           )}
-          
-          <p className="text-zinc-500 mt-4 text-sm">
-            Updated {new Date(conditions.timestamp).toLocaleTimeString()}
-          </p>
-        </div>
-
-        {/* Score Breakdown */}
-        <div className="bg-zinc-800 rounded-xl p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4">Score Breakdown</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className={`text-2xl font-bold ${breakdown.factors.height.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {breakdown.factors.height.score > 0 ? '+' : ''}{breakdown.factors.height.score}
-              </div>
-              <div className="text-xs text-zinc-400 mt-1">Height</div>
-              <div className="text-xs text-zinc-500">{breakdown.factors.height.note}</div>
-            </div>
-            <div className="text-center">
-              <div className={`text-2xl font-bold ${breakdown.factors.period.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {breakdown.factors.period.score > 0 ? '+' : ''}{breakdown.factors.period.score}
-              </div>
-              <div className="text-xs text-zinc-400 mt-1">Period</div>
-              <div className="text-xs text-zinc-500">{breakdown.factors.period.note}</div>
-            </div>
-            <div className="text-center">
-              <div className={`text-2xl font-bold ${breakdown.factors.tide.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {breakdown.factors.tide.score > 0 ? '+' : ''}{breakdown.factors.tide.score}
-              </div>
-              <div className="text-xs text-zinc-400 mt-1">Tide</div>
-              <div className="text-xs text-zinc-500">{breakdown.factors.tide.note}</div>
-            </div>
-            <div className="text-center">
-              <div className={`text-2xl font-bold ${breakdown.factors.wind.score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {breakdown.factors.wind.score > 0 ? '+' : ''}{breakdown.factors.wind.score}
-              </div>
-              <div className="text-xs text-zinc-400 mt-1">Wind</div>
-              <div className="text-xs text-zinc-500">{breakdown.factors.wind.note}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Conditions Grid */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* Waves */}
-          <div className="bg-zinc-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              🌊 Waves
-            </h2>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Height</span>
-                <span className="font-mono text-xl">{conditions.waveHeight} ft</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Period</span>
-                <span className="font-mono text-xl">{conditions.wavePeriod}s</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Direction</span>
-                <span className="font-mono">
-                  {degreeToCardinal(conditions.waveDirection)} ({conditions.waveDirection}°)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Wind */}
-          <div className="bg-zinc-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              💨 Wind
-              {offshore && (
-                <span className="text-xs bg-green-600 px-2 py-0.5 rounded">OFFSHORE</span>
-              )}
-            </h2>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Speed</span>
-                <span className="font-mono text-xl">{conditions.windSpeed} kn</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Gusts</span>
-                <span className="font-mono text-xl">{conditions.windGusts} kn</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Direction</span>
-                <span className="font-mono">
-                  {degreeToCardinal(conditions.windDirection)} ({conditions.windDirection}°)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Tide */}
-          <div className="bg-zinc-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              🌙 Tide
-              <span className={`text-xs px-2 py-0.5 rounded ${
-                conditions.tideRising ? 'bg-blue-600' : 'bg-orange-600'
-              }`}>
-                {conditions.tideRising ? '↑ RISING' : '↓ FALLING'}
-              </span>
-            </h2>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Current</span>
-                <span className="font-mono text-xl">{conditions.tideHeight.toFixed(1)} ft</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Next {conditions.tideRising ? 'High' : 'Low'}</span>
-                <span className="font-mono">{conditions.nextTideExtreme.toFixed(1)} ft</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Water */}
-          <div className="bg-zinc-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4">🌡️ Water</h2>
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Temperature</span>
-                <span className="font-mono text-xl">{conditions.waterTemp}°F</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">Wetsuit</span>
-                <span className="font-mono">
-                  {conditions.waterTemp >= 75 ? 'Trunks' :
-                   conditions.waterTemp >= 68 ? 'Shorty/Spring' :
-                   conditions.waterTemp >= 60 ? '3/2mm' :
-                   conditions.waterTemp >= 55 ? '4/3mm' : '5/4mm + boots'}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Data Sources */}
-        <div className="bg-zinc-800/50 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-zinc-400 mb-3">Data Sources</h3>
-          <div className="flex flex-wrap gap-2">
-            {conditions.buoysUsed.map(id => (
-              <a
-                key={id}
-                href={`https://www.ndbc.noaa.gov/station_page.php?station=${id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded"
-              >
-                Buoy {id}
-              </a>
-            ))}
-            <a
-              href="https://tidesandcurrents.noaa.gov/stationhome.html?id=8665530"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded"
-            >
-              Charleston Tide
-            </a>
+        <div className="mt-8 bg-zinc-800/50 rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-zinc-400 mb-2">Data Sources</h3>
+          <div className="text-xs text-zinc-500">
+            <span className="text-zinc-400">Real-time:</span> NDBC Buoys ({conditions.buoysUsed.join(', ')}), NOAA Tide Gauge (8665530)
+            <br />
+            <span className="text-zinc-400">Forecast:</span> Open-Meteo Marine API, NOAA Tide Predictions
           </div>
-          <p className="text-xs text-zinc-500 mt-3">
-            Confidence: {Math.round(conditions.confidence * 100)}% • 
-            Blended from {conditions.buoysUsed.length} buoys
-          </p>
         </div>
 
         {/* Feedback CTA */}
