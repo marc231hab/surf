@@ -251,12 +251,12 @@ export async function fetch9DayForecastWithHourly(): Promise<DayWithHourly[]> {
     const dateStr = date.toISOString().split('T')[0];
     const dayName = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : dayNames[date.getDay()];
     
-    // Get hourly forecasts for this day (5am - 9pm)
+    // Get hourly forecasts for this day (all 24 hours)
     const hourly: HourlyForecast[] = [];
     let bestHour = 8;
     let bestScore = 0;
     
-    for (let hour = 5; hour <= 21; hour++) {
+    for (let hour = 0; hour <= 23; hour++) {
       const timeStr = `${dateStr}T${hour.toString().padStart(2, '0')}:00`;
       const idx = marine.time.indexOf(timeStr);
       
