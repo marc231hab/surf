@@ -113,13 +113,17 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
     periodScore = 0;
     periodNote = `${p}s - okay`;
   } else if (p >= 6 && p < 7) {
-    periodScore = -15;
+    periodScore = -10;
     periodNote = `${p}s - short, choppy`;
     notes.push('Short period');
-  } else if (p < 6) {
-    periodScore = -30;
+  } else if (p >= 5 && p < 6) {
+    periodScore = -18;
     periodNote = `${p}s - very short`;
     notes.push('Very short period');
+  } else if (p < 5) {
+    periodScore = -25;
+    periodNote = `${p}s - wind chop`;
+    notes.push('Wind chop');
   } else if (p > 13 && p <= 15) {
     periodScore = -8;
     periodNote = `${p}s - closes out`;
@@ -231,21 +235,21 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
     }
   } else if (onshore) {
     if (ws <= 5) {
-      windScore = -5;
+      windScore = -3;
       windNote = `${ws}kn ${windDir} - light onshore`;
-    } else if (ws <= 7) {
-      windScore = -10;
+    } else if (ws <= 8) {
+      windScore = -8;
       windNote = `${ws}kn ${windDir} - onshore`;
-    } else if (ws <= 10) {
-      windScore = -18;
-      windNote = `${ws}kn ${windDir} - onshore >7kn`;
-      notes.push('Onshore wind >7kn');
-    } else if (ws <= 15) {
-      windScore = -25;
+    } else if (ws <= 12) {
+      windScore = -14;
+      windNote = `${ws}kn ${windDir} - moderate onshore`;
+      notes.push('Onshore wind');
+    } else if (ws <= 18) {
+      windScore = -22;
       windNote = `${ws}kn ${windDir} - strong onshore`;
       notes.push('Strong onshore');
     } else {
-      windScore = -35;
+      windScore = -30;
       windNote = `${ws}kn ${windDir} - blown out`;
       notes.push('Blown out');
     }
@@ -276,26 +280,25 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   // === INTERACTION PENALTIES ===
   // Small waves + short period = not worth it
   if (h < 2.5 && p < 7) {
-    total -= 15;
+    total -= 10;
     notes.push('Small + short period');
   }
-  if (h < 2 && p < 8) {
-    total -= 10; // Extra penalty for very small
-  }
   if (t < 2.2 && h < 2.5) {
-    total -= 15;
+    total -= 10;
     notes.push('Low tide + small waves');
   }
-  if (p < 6 && onshore && ws > 7) {
-    total -= 15;
-    notes.push('Short period + onshore');
-  }
-  if (p < 6 && ws > 10) {
-    total -= 10;
+  if (p < 6 && onshore && ws > 10) {
+    total -= 8;
+    notes.push('Choppy + onshore');
   }
   // Good conditions bonus only when waves are actually rideable
   if (offshore && ws <= 10 && h >= 2.5 && p >= 7) {
     total += 5;
+  }
+  
+  // Floor: decent waves (3ft+) should never be "Very Poor"
+  if (h >= 3 && total < 20) {
+    total = 20;
   }
 
   return {
