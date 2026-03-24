@@ -217,15 +217,16 @@ export async function fetchBlendedConditions(): Promise<BlendedConditions | null
       return null;
     }
 
-    // Calculate weighted averages
-    let totalWeight = 0;
-    let weightedHeight = 0;
-    let weightedPeriod = 0;
-    let weightedWaveDir = 0;
-    let weightedWindSpeed = 0;
-    let weightedWindDir = 0;
-    let weightedGusts = 0;
-    let weightedTemp = 0;
+    // Calculate weighted averages - track weights per metric
+    const metrics = {
+      height: { sum: 0, weight: 0 },
+      period: { sum: 0, weight: 0 },
+      waveDir: { sum: 0, weight: 0 },
+      windSpeed: { sum: 0, weight: 0 },
+      windDir: { sum: 0, weight: 0 },
+      gusts: { sum: 0, weight: 0 },
+      temp: { sum: 0, weight: 0 },
+    };
     const buoysUsed: string[] = [];
 
     for (const reading of validReadings) {
@@ -235,52 +236,63 @@ export async function fetchBlendedConditions(): Promise<BlendedConditions | null
       const weight = buoyInfo.weight;
       
       if (reading.waveHeight !== null) {
-        weightedHeight += reading.waveHeight * weight;
-        totalWeight += weight;
+        metrics.height.sum += reading.waveHeight * weight;
+        metrics.height.weight += weight;
         buoysUsed.push(reading.buoyId);
       }
       if (reading.wavePeriod !== null) {
-        weightedPeriod += reading.wavePeriod * weight;
+        metrics.period.sum += reading.wavePeriod * weight;
+        metrics.period.weight += weight;
       }
       if (reading.waveDirection !== null) {
-        weightedWaveDir += reading.waveDirection * weight;
+        metrics.waveDir.sum += reading.waveDirection * weight;
+        metrics.waveDir.weight += weight;
       }
       if (reading.windSpeed !== null) {
-        weightedWindSpeed += reading.windSpeed * weight;
+        metrics.windSpeed.sum += reading.windSpeed * weight;
+        metrics.windSpeed.weight += weight;
       }
       if (reading.windDirection !== null) {
-        weightedWindDir += reading.windDirection * weight;
+        metrics.windDir.sum += reading.windDirection * weight;
+        metrics.windDir.weight += weight;
       }
       if (reading.windGusts !== null) {
-        weightedGusts += reading.windGusts * weight;
+        metrics.gusts.sum += reading.windGusts * weight;
+        metrics.gusts.weight += weight;
       }
       if (reading.waterTemp !== null) {
-        weightedTemp += reading.waterTemp * weight;
+        metrics.temp.sum += reading.waterTemp * weight;
+        metrics.temp.weight += weight;
       }
     }
 
-    if (totalWeight === 0) return null;
+    if (metrics.height.weight === 0) return null;
 
-    // Normalize
-    const normalize = (val: number) => Math.round((val / totalWeight) * 10) / 10;
+    // Normalize each metric by its own weight
+    const normalize = (m: { sum: number; weight: number }) => 
+      m.weight > 0 ? Math.round((m.sum / m.weight) * 10) / 10 : null;
 
     return {
-      waveHeight: normalize(weightedHeight),
-      wavePeriod: normalize(weightedPeriod),
-      waveDirection: Math.round(weightedWaveDir / totalWeight),
-      windSpeed: normalize(weightedWindSpeed),
-      windDirection: Math.round(weightedWindDir / totalWeight),
-      windGusts: normalize(weightedGusts) || normalize(weightedWindSpeed) + 5,
+      waveHeight: normalize(metrics.height) ?? 0,
+      wavePeriod: normalize(metrics.period) ?? 8,
+      waveDirection: metrics.waveDir.weight > 0 
+        ? Math.round(metrics.waveDir.sum / metrics.waveDir.weight) 
+        : 90,
+      windSpeed: normalize(metrics.windSpeed) ?? 10,
+      windDirection: metrics.windDir.weight > 0 
+        ? Math.round(metrics.windDir.sum / metrics.windDir.weight) 
+        : 0,
+      windGusts: normalize(metrics.gusts) ?? (normalize(metrics.windSpeed) ?? 10) + 5,
       tideHeight: tide.currentHeight,
       tideRising: tide.phase === 'rising',
       nextTideExtreme: tide.nextExtreme.height,
       secondarySwellHeight: 0, // TODO: parse from spectral data
       secondarySwellPeriod: 0,
       secondarySwellDirection: 0,
-      waterTemp: normalize(weightedTemp) || 70,
+      waterTemp: normalize(metrics.temp) ?? 70,
       timestamp: new Date().toISOString(),
       buoysUsed,
-      confidence: Math.min(1, totalWeight / 0.8), // Max confidence at 80% coverage
+      confidence: Math.min(1, metrics.height.weight / 0.8), // Max confidence at 80% coverage
     };
   } catch (error) {
     console.error('Error blending conditions:', error);
