@@ -58,6 +58,7 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   let total = 50;
 
   // === WAVE HEIGHT ===
+  // Below 2ft = lower scores
   const h = input.waveHeight;
   let heightScore = 0;
   let heightNote = '';
@@ -65,16 +66,24 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
   if (h >= 3 && h <= 6) {
     heightScore = 25;
     heightNote = `${h}ft - sweet spot`;
-  } else if (h >= 2 && h < 3) {
-    heightScore = 12;
-    heightNote = `${h}ft - decent size`;
+  } else if (h >= 2.5 && h < 3) {
+    heightScore = 15;
+    heightNote = `${h}ft - good size`;
+  } else if (h >= 2 && h < 2.5) {
+    heightScore = 8;
+    heightNote = `${h}ft - decent`;
   } else if (h >= 1.5 && h < 2) {
-    heightScore = -5;
+    heightScore = -12;
+    heightNote = `${h}ft - below 2ft`;
+    notes.push('Waves below 2ft');
+  } else if (h >= 1 && h < 1.5) {
+    heightScore = -25;
     heightNote = `${h}ft - small`;
-  } else if (h < 1.5) {
-    heightScore = -30;
-    heightNote = `${h}ft - too small`;
     notes.push('Waves too small');
+  } else if (h < 1) {
+    heightScore = -35;
+    heightNote = `${h}ft - flat`;
+    notes.push('Basically flat');
   } else if (h > 6 && h <= 8) {
     heightScore = 18;
     heightNote = `${h}ft - solid`;
@@ -113,6 +122,27 @@ export function calculateSurfScoreWithBreakdown(input: SurfInput): ScoreBreakdow
     periodNote = `${p}s - too long`;
   }
   total += periodScore;
+
+  // === WAVE DIRECTION ===
+  // Specific to Folly Beach 13th Street
+  const wd = input.waveDirection ?? 170;
+  if (wd >= 160 && wd <= 190) {
+    total += 15;  // Best direction - S to SSE
+  } else if (wd >= 130 && wd < 160) {
+    total += 8;   // SSE to SE - okay but can close out
+    notes.push('Swell may close out');
+  } else if (wd >= 110 && wd < 130) {
+    total += 12;  // SE to ESE - can be great
+  } else if (wd > 190 && wd <= 200) {
+    total += 5;   // S to SSW - okay but shadowed/drifty
+    notes.push('Shadowed swell');
+  } else if (wd >= 75 && wd < 110) {
+    total -= 8;   // ESE to ENE - shadowed by jetties, drifty
+    notes.push('Shadowed by jetties');
+  } else {
+    total -= 20;  // Wrong direction
+    notes.push('Poor swell direction');
+  }
 
   // === TIDE HEIGHT ===
   const t = input.tideHeight;

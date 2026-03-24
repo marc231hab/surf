@@ -75,15 +75,20 @@ def label_surf_score(
     
     # =========================================================================
     # WAVE HEIGHT (most important factor)
+    # Below 2ft = lower scores
     # =========================================================================
     if wave_height >= 3 and wave_height <= 6:
         score += 25  # Sweet spot
-    elif wave_height >= 2 and wave_height < 3:
-        score += 12  # Decent
+    elif wave_height >= 2.5 and wave_height < 3:
+        score += 15  # Good size
+    elif wave_height >= 2 and wave_height < 2.5:
+        score += 8   # Decent, minimum for fun
     elif wave_height >= 1.5 and wave_height < 2:
-        score -= 5   # Small
-    elif wave_height < 1.5:
-        score -= 30  # Too small to surf
+        score -= 12  # Below 2ft - not great
+    elif wave_height >= 1 and wave_height < 1.5:
+        score -= 25  # Small - hard to catch
+    elif wave_height < 1:
+        score -= 35  # Too small to surf
     elif wave_height > 6 and wave_height <= 8:
         score += 18  # Solid day
     elif wave_height > 8 and wave_height <= 10:
@@ -112,21 +117,29 @@ def label_surf_score(
         score -= 15  # Too long, not ideal for this beach
     
     # =========================================================================
-    # WAVE DIRECTION (Folly best with E/NE swells)
+    # WAVE DIRECTION (specific to Folly Beach 13th Street)
     # =========================================================================
-    dir_diff = angle_difference(wave_direction, IDEAL_SWELL_DIRECTION)
-    if dir_diff <= 15:
-        score += 12  # Perfect angle
-    elif dir_diff <= 30:
-        score += 8   # Great angle
-    elif dir_diff <= 45:
-        score += 4   # Good
-    elif dir_diff <= 60:
-        score += 0   # Workable
-    elif dir_diff <= 90:
-        score -= 8   # Not ideal
+    # 190-160°: best (S to SSE swells)
+    # 160-130°: okay but can close out (SSE to SE)
+    # 130-110°: can be great (SE to ESE)
+    # 200-190°: okay but shadowed/drifty (S to SSW)
+    # 110-75°: shadowed by jetties, very drifty (ESE to ENE)
+    # Everything else: offshore/doesn't work
+    # =========================================================================
+    wd = wave_direction
+    if wd >= 160 and wd <= 190:
+        score += 15  # Best direction - S to SSE
+    elif wd >= 130 and wd < 160:
+        score += 8   # SSE to SE - okay but can close out
+    elif wd >= 110 and wd < 130:
+        score += 12  # SE to ESE - can be great
+    elif wd > 190 and wd <= 200:
+        score += 5   # S to SSW - okay but shadowed/drifty
+    elif wd >= 75 and wd < 110:
+        score -= 8   # ESE to ENE - shadowed by jetties, drifty
     else:
-        score -= 15  # Wrong direction, shadowed
+        # Offshore directions or way off - doesn't work
+        score -= 20  # Wrong direction for this beach
     
     # =========================================================================
     # TIDE HEIGHT (3.5ft optimal for Folly)
@@ -288,12 +301,13 @@ def label_surf_score(
     if wave_period < 6 and wind_speed > 10:
         score -= 10
     
-    # Perfect combo bonus
+    # Perfect combo bonus (best wave direction is 160-190°)
+    good_direction = (wave_direction >= 130 and wave_direction <= 190)
     if (wave_height >= 3 and wave_height <= 5 and
         wave_period >= 10 and wave_period <= 12 and
         tide_height >= 2.5 and tide_height <= 4 and
         wind_speed <= 10 and offshore and
-        dir_diff <= 30):
+        good_direction):
         score += 10  # Everything aligned
     
     return max(0, min(100, score))
@@ -306,7 +320,7 @@ def generate_grid_samples():
     # Key values for each feature
     heights = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
     periods = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16]
-    wave_dirs = [30, 60, 75, 90, 120, 150, 180]  # Various swell angles
+    wave_dirs = [80, 100, 120, 140, 160, 175, 190, 200, 220]  # Folly-relevant swell angles
     wind_speeds = [0, 5, 8, 10, 12, 15, 18, 22, 28]
     wind_dirs = [0, 45, 90, 135, 180, 225, 270, 315]  # All compass points
     tide_heights = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]
