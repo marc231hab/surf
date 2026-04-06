@@ -90,7 +90,7 @@ export async function fetchBuoyData(buoyId: string): Promise<BuoyReading | null>
 
       const wvht = parseFloat(parts[8]);
       const dpd = parseFloat(parts[9]);
-      const mwd = parseFloat(parts[10]);
+      const mwd = parseFloat(parts[11]);
       const wspd = parseFloat(parts[6]);
       const wdir = parseFloat(parts[5]);
       const gst = parseFloat(parts[7]);
