@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchBlendedConditions } from '@/lib/buoys';
 import { calculateSurfScore, getSurfRating } from '@/lib/surfModel';
 
-export const revalidate = 300; // 5 minutes
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {

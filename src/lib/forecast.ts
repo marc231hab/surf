@@ -39,7 +39,7 @@ interface WeatherHourly {
 async function fetchMarineForecast(): Promise<MarineHourly | null> {
   try {
     const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${FOLLY_COORDS.lat}&longitude=${FOLLY_COORDS.lon}&hourly=wave_height,wave_period,wave_direction&timezone=America/New_York&forecast_days=10`;
-    const res = await fetch(url, { next: { revalidate: 3600 } });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     return data.hourly;
@@ -55,7 +55,7 @@ async function fetchMarineForecast(): Promise<MarineHourly | null> {
 async function fetchWindForecast(): Promise<WeatherHourly | null> {
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${FOLLY_COORDS.lat}&longitude=${FOLLY_COORDS.lon}&hourly=wind_speed_10m,wind_direction_10m&timezone=America/New_York&forecast_days=10&wind_speed_unit=kn`;
-    const res = await fetch(url, { next: { revalidate: 3600 } });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     return data.hourly;
@@ -79,7 +79,7 @@ async function fetchTidePredictions(): Promise<Map<string, { low: number; high: 
     
     const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${startDate}&end_date=${endDate}&station=${TIDE_STATION}&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&interval=hilo&format=json`;
     
-    const res = await fetch(url, { next: { revalidate: 3600 } });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return tidesByDay;
     
     const data = await res.json();
@@ -199,7 +199,7 @@ async function fetchHourlyTides(): Promise<Map<string, { height: number; rising:
     // Get hourly predictions
     const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${startDate}&end_date=${endDate}&station=${TIDE_STATION}&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&interval=h&format=json`;
     
-    const res = await fetch(url, { next: { revalidate: 3600 } });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return tidesByHour;
     
     const data = await res.json();

@@ -57,7 +57,7 @@ export async function fetchBuoyData(buoyId: string): Promise<BuoyReading | null>
   try {
     // Fetch standard meteorological data
     const metUrl = `https://www.ndbc.noaa.gov/data/realtime2/${buoyId}.txt`;
-    const metRes = await fetch(metUrl, { next: { revalidate: 600 } });
+    const metRes = await fetch(metUrl, { cache: 'no-store' });
     
     if (!metRes.ok) return null;
     
@@ -146,8 +146,8 @@ export async function fetchTideData(): Promise<TideReading | null> {
     const hiloUrl = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date=${startDate}&end_date=${endDate}&station=${TIDE_STATION}&product=predictions&datum=MLLW&units=english&time_zone=lst_ldt&interval=hilo&format=json`;
 
     const [levelRes, hiloRes] = await Promise.all([
-      fetch(levelUrl, { next: { revalidate: 300 } }),
-      fetch(hiloUrl, { next: { revalidate: 3600 } }),
+      fetch(levelUrl, { cache: 'no-store' }),
+      fetch(hiloUrl, { cache: 'no-store' }),
     ]);
 
     if (!levelRes.ok || !hiloRes.ok) return null;
@@ -221,9 +221,9 @@ export async function fetchBlendedConditions(): Promise<BlendedConditions | null
     const metrics = {
       height: { sum: 0, weight: 0 },
       period: { sum: 0, weight: 0 },
-      waveDir: { sum: 0, weight: 0 },
+      waveDir: { sinSum: 0, cosSum: 0, weight: 0 },
       windSpeed: { sum: 0, weight: 0 },
-      windDir: { sum: 0, weight: 0 },
+      windDir: { sinSum: 0, cosSum: 0, weight: 0 },
       gusts: { sum: 0, weight: 0 },
       temp: { sum: 0, weight: 0 },
     };
@@ -234,7 +234,7 @@ export async function fetchBlendedConditions(): Promise<BlendedConditions | null
       if (!buoyInfo) continue;
 
       const weight = buoyInfo.weight;
-      
+
       if (reading.waveHeight !== null) {
         metrics.height.sum += reading.waveHeight * weight;
         metrics.height.weight += weight;
@@ -245,7 +245,9 @@ export async function fetchBlendedConditions(): Promise<BlendedConditions | null
         metrics.period.weight += weight;
       }
       if (reading.waveDirection !== null) {
-        metrics.waveDir.sum += reading.waveDirection * weight;
+        const rad = reading.waveDirection * Math.PI / 180;
+        metrics.waveDir.sinSum += Math.sin(rad) * weight;
+        metrics.waveDir.cosSum += Math.cos(rad) * weight;
         metrics.waveDir.weight += weight;
       }
       if (reading.windSpeed !== null) {
@@ -253,7 +255,9 @@ export async function fetchBlendedConditions(): Promise<BlendedConditions | null
         metrics.windSpeed.weight += weight;
       }
       if (reading.windDirection !== null) {
-        metrics.windDir.sum += reading.windDirection * weight;
+        const rad = reading.windDirection * Math.PI / 180;
+        metrics.windDir.sinSum += Math.sin(rad) * weight;
+        metrics.windDir.cosSum += Math.cos(rad) * weight;
         metrics.windDir.weight += weight;
       }
       if (reading.windGusts !== null) {
@@ -268,20 +272,23 @@ export async function fetchBlendedConditions(): Promise<BlendedConditions | null
 
     if (metrics.height.weight === 0) return null;
 
-    // Normalize each metric by its own weight
-    const normalize = (m: { sum: number; weight: number }) => 
+    // Normalize linear metrics by weight
+    const normalize = (m: { sum: number; weight: number }) =>
       m.weight > 0 ? Math.round((m.sum / m.weight) * 10) / 10 : null;
+
+    // Circular mean for direction metrics
+    const circularMean = (m: { sinSum: number; cosSum: number; weight: number }) => {
+      if (m.weight === 0) return null;
+      const deg = Math.atan2(m.sinSum, m.cosSum) * 180 / Math.PI;
+      return Math.round((deg + 360) % 360);
+    };
 
     return {
       waveHeight: normalize(metrics.height) ?? 0,
       wavePeriod: normalize(metrics.period) ?? 8,
-      waveDirection: metrics.waveDir.weight > 0 
-        ? Math.round(metrics.waveDir.sum / metrics.waveDir.weight) 
-        : 90,
+      waveDirection: circularMean(metrics.waveDir) ?? 90,
       windSpeed: normalize(metrics.windSpeed) ?? 10,
-      windDirection: metrics.windDir.weight > 0 
-        ? Math.round(metrics.windDir.sum / metrics.windDir.weight) 
-        : 0,
+      windDirection: circularMean(metrics.windDir) ?? 0,
       windGusts: normalize(metrics.gusts) ?? (normalize(metrics.windSpeed) ?? 10) + 5,
       tideHeight: tide.currentHeight,
       tideRising: tide.phase === 'rising',

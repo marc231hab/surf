@@ -1,6 +1,6 @@
 import { fetch9DayForecastWithHourly } from '@/lib/forecast';
 
-export const revalidate = 300; // 5 minutes
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
